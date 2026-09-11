@@ -9,10 +9,9 @@ jobs:
   auto-colab-job:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Colab linked code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: Setup Python (Same as Colab)
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
@@ -22,24 +21,36 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      - name: Install Python libs
+      - name: Install dependencies (auto fix)
         run: |
-          pip install -r requirements.txt
+          ls -la
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          elif [ -f requirement.txt ]; then
+            pip install -r requirement.txt
+          else
+            pip install google-generativeai edge-tts moviepy pandas nest-asyncio google-api-python-client google-auth requests
+          fi
 
-            - name: Run Bot (GitHub wakes up Colab job internally)
+      - name: Run Bot
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
         run: |
-          echo "⏰ GitHub Alarm - Waking up Colab job at $(date)"
+          echo "⏰ GitHub waking up Colab job"
           ls -la
-          echo "Checking bot.py"
-          cat bot.py | head -20
-          python bot.py
+          if [ -f bot.py ]; then
+            python bot.py
+          elif [ -f Bot.py ]; then
+            python Bot.py
+          else
+            ls -la *.py
+            python *.py
+          fi
 
-      - name: Upload video as backup
+      - name: Upload artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:

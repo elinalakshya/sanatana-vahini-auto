@@ -6,21 +6,31 @@ try:
 except ImportError:
     from moviepy import AudioFileClip, ColorClip, VideoFileClip
 
-OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OR_API_KEY") or os.environ.get("OPEN_ROUTER_API_KEY") or ""
+OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OR_API_KEY") or os.environ.get("OPEN_ROUTER_API_KEY") or os.environ.get("OPENROUTER_KEY") or ""
+# Debug all env
+print(f"ENV DEBUG: OPENROUTER_API_KEY present: {chr(79)+chr(80)+chr(69)+chr(78)+chr(82)+chr(79)+chr(85)+chr(84)+chr(69)+chr(82)+chr(95)+chr(65)+chr(80)+chr(73)+chr(95)+chr(75)+chr(69)+chr(89) in os.environ}")
+print("All env keys:", [k for k in os.environ.keys() if "API" in k or "ROUTER" in k])
+for k in os.environ.keys():
+    if "ROUTER" in k or "OPEN" in k or "GEMINI" in k:
+        print(f"ENV {k}: len={len(os.environ[k])}")
 GEMINI_FALLBACK_KEY = os.environ.get("GEMINI_API_KEY") or ""
 print(f"Keys present - OpenRouter: {bool(OPENROUTER_KEY)} len={len(OPENROUTER_KEY) if OPENROUTER_KEY else 0} Gemini: {bool(GEMINI_FALLBACK_KEY)}")
 
 OPENROUTER_MODELS = [
+    "google/gemini-2.5-flash",
     "google/gemini-2.0-flash-001",
-    "google/gemini-2.0-flash-exp:free",
+    "google/gemini-2.5-pro",
     "google/gemini-flash-1.5",
-    "google/gemini-flash-1.5-8b",
+    "google/gemini-2.0-flash-exp:free",
     "google/gemini-2.0-flash-thinking-exp:free",
     "anthropic/claude-3.5-haiku",
+    "anthropic/claude-3-haiku",
     "openai/gpt-4o-mini",
+    "openai/gpt-4o",
     "meta-llama/llama-3.3-70b-instruct",
-    "google/gemini-2.0-pro-exp-02-05:free",
     "deepseek/deepseek-chat:free",
+    "deepseek/deepseek-r1:free",
+    "qwen/qwen-2.5-72b-instruct:free",
 ]
 
 def generate_with_openrouter(prompt, max_retries=12):
@@ -74,7 +84,7 @@ def generate_with_gemini_fallback(prompt):
         return None
     try:
         from google import genai as genai_new
-        for model_name in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+        for model_name in ["gemini-2.5-flash", "gemini-3.6-flash", "gemini-2.0-flash-001", "gemini-1.5-flash-latest", "gemini-flash-latest"]:
             try:
                 client = genai_new.Client(api_key=GEMINI_FALLBACK_KEY)
                 response = client.models.generate_content(model=model_name, contents=prompt)
@@ -88,7 +98,7 @@ def generate_with_gemini_fallback(prompt):
     try:
         import google.generativeai as genai_old
         genai_old.configure(api_key=GEMINI_FALLBACK_KEY)
-        for model_name in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+        for model_name in ["gemini-2.5-flash", "gemini-3.6-flash", "gemini-2.0-flash-001", "gemini-1.5-flash-latest", "gemini-flash-latest"]:
             try:
                 model = genai_old.GenerativeModel(model_name)
                 response = model.generate_content(prompt)

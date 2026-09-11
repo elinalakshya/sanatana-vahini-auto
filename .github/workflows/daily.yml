@@ -26,14 +26,17 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Run Bot (GitHub wakes up Colab job internally)
+            - name: Run Bot (GitHub wakes up Colab job internally)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
         run: |
-          echo "⏰ GitHub Alarm - Waking up Colab job"
+          echo "⏰ GitHub Alarm - Waking up Colab job at $(date)"
+          ls -la
+          echo "Checking bot.py"
+          cat bot.py | head -20
           python bot.py
 
       - name: Upload video as backup

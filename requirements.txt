@@ -1,4 +1,6 @@
 google-generativeai
+google-genai
+openai
 edge-tts
 moviepy
 pandas

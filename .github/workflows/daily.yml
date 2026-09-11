@@ -1,0 +1,46 @@
+name: Sanatana Vahini - Colab Linked Auto Upload
+
+on:
+  schedule:
+    - cron: '30 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  auto-colab-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Colab linked code
+        uses: actions/checkout@v3
+
+      - name: Setup Python (Same as Colab)
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python libs
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Bot (GitHub wakes up Colab job internally)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+        run: |
+          echo "⏰ GitHub Alarm - Waking up Colab job"
+          python bot.py
+
+      - name: Upload video as backup
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanatana-video-${{ github.run_number }}
+          path: |
+            *.mp4
+            *.mp3

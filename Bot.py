@@ -1,0 +1,137 @@
+
+import os, pandas as pd, asyncio, nest_asyncio, json, sys
+from datetime import datetime
+
+# Auto install if missing (for GitHub runner)
+try:
+    import google.generativeai as genai
+    from moviepy.editor import AudioFileClip, ColorClip, VideoFileClip
+    import edge_tts
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+except ImportError:
+    import subprocess
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "google-generativeai", "edge-tts", "moviepy", "pandas", "nest-asyncio", "google-api-python-client", "google-auth", "requests"])
+    import google.generativeai as genai
+    from moviepy.editor import AudioFileClip, ColorClip, VideoFileClip
+    import edge_tts
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+
+def get_config():
+    return (
+        os.environ.get("GEMINI_API_KEY") or globals().get("GEMINI_API_KEY"),
+        os.environ.get("YT_CLIENT_ID") or globals().get("YT_CLIENT_ID"),
+        os.environ.get("YT_CLIENT_SECRET") or globals().get("YT_CLIENT_SECRET"),
+        os.environ.get("YT_REFRESH_TOKEN") or globals().get("YT_REFRESH_TOKEN"),
+    )
+
+GEMINI_KEY, YT_ID, YT_SECRET, YT_REFRESH = get_config()
+SHEET_ID = "15t2x8TAnvw4KgSVdpViCZmFQ0oEBZk2DDD7AOS0dwcE"
+nest_asyncio.apply()
+genai.configure(api_key=GEMINI_KEY)
+model = genai.GenerativeModel('gemini-1.5-flash')
+
+def get_youtube():
+    if not YT_REFRESH:
+        print("⚠️ No YouTube token - will save file only")
+        return None
+    creds = Credentials(None, refresh_token=YT_REFRESH, token_uri="https://oauth2.googleapis.com/token",
+                        client_id=YT_ID, client_secret=YT_SECRET,
+                        scopes=["https://www.googleapis.com/auth/youtube.upload"])
+    return build("youtube", "v3", credentials=creds)
+
+def quality_check(video_path, audio_path, is_short=False):
+    import os
+    from moviepy.editor import VideoFileClip, AudioFileClip
+    print(f"\n🔍 QUALITY CHECK: {video_path}")
+    if not os.path.exists(video_path):
+        return False, "Video not found"
+    size_mb = os.path.getsize(video_path)/(1024*1024)
+    if size_mb < 1:
+        return False, f"Too small {size_mb:.2f}MB"
+    print(f"✅ Size {size_mb:.2f}MB")
+    try:
+        audio = AudioFileClip(audio_path)
+        ad = audio.duration
+        audio.close()
+        if ad < 25: return False, f"Audio short {ad}s"
+        print(f"✅ Audio {ad:.1f}s")
+    except Exception as e:
+        return False, f"Audio error {e}"
+    try:
+        video = VideoFileClip(video_path)
+        vd, w, h = video.duration, video.w, video.h
+        has_audio = video.audio is not None
+        video.close()
+        if abs(vd-ad) > 3: return False, f"Duration mismatch v{vd}s a{ad}s"
+        if not has_audio: return False, "No audio track"
+        if is_short and not (w==1080 and h==1920): return False, f"Short res wrong {w}x{h}"
+        print(f"✅ Video {vd:.1f}s {w}x{h} audio present")
+    except Exception as e:
+        return False, f"Video error {e}"
+    print("✅ ALL CHECKS PASSED")
+    return True, "Passed"
+
+def upload_youtube(file_path, title, description, tags):
+    yt = get_youtube()
+    if not yt:
+        print(f"📁 Saved {file_path} - manual upload needed")
+        return None
+    try:
+        body = {"snippet": {"title": title[:95], "description": description, "tags": tags, "categoryId": "27"},
+                "status": {"privacyStatus": "public"}}
+        media = MediaFileUpload(file_path, mimetype="video/mp4", resumable=True)
+        resp = yt.videos().insert(part="snippet,status", body=body, media_body=media).execute()
+        url = f"https://youtube.com/watch?v={resp['id']}"
+        print(f"🎉 UPLOADED: {url}")
+        return url
+    except Exception as e:
+        print(f"Upload error {e}")
+        return None
+
+today_str = datetime.now().strftime("%Y-%m-%d")
+today_dt = pd.to_datetime(today_str)
+print(f"📅 Today {today_str}")
+
+# DAILY GITA
+GITA_CSV = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=877804106"
+df_gita = pd.read_csv(GITA_CSV)
+df_gita['Date'] = pd.to_datetime(df_gita['Date'], errors='coerce')
+gita_today = df_gita[df_gita['Date'] == today_dt]
+if not gita_today.empty:
+    row = gita_today.iloc[0]
+    sanskrit = row['Sanskrit Sloka']
+    print(f"🎯 GITA {row['Sloka Reference']} {row['Chapter Name']}")
+    prompt = f"You are Telugu Gita teacher for YouTube Shorts 60 sec. Sanskrit: {sanskrit} Chapter {row['Chapter No']} Verse {row['Sloka No']}. Write 180 words Telugu: Sanskrit + Telugu meaning + daily use + Jai Shri Krishna. Simple Telugu."
+    telugu = model.generate_content(prompt).text
+    
+    async def make():
+        await edge_tts.Communicate(telugu, "te-IN-MohanNeural").save("gita_voice.mp3")
+        from moviepy.editor import AudioFileClip, ColorClip
+        audio = AudioFileClip("gita_voice.mp3")
+        bg = ColorClip(size=(1080,1920), color=(25,15,5), duration=audio.duration)
+        final = bg.set_audio(audio)
+        final.write_videofile("GITA_SHORT.mp4", fps=24, codec='libx264', audio_codec='aac')
+        passed, msg = quality_check("GITA_SHORT.mp4", "gita_voice.mp3", is_short=True)
+        if passed:
+            title = f"Bhagavad Gita {row['Sloka Reference']} | {row['Chapter Name']} Telugu #Shorts"
+            desc = f"{telugu}\n\nSanskrit: {sanskrit}\n#GitaTelugu #SanatanaVahini"
+            upload_youtube("GITA_SHORT.mp4", title, desc, ["Gita Telugu","Shorts"])
+        else:
+            print(f"❌ QC Failed {msg}")
+    asyncio.run(make())
+else:
+    print("No Gita today")
+
+# WEEKLY FULL - same logic
+MAIN_CSV = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
+df_main = pd.read_csv(MAIN_CSV)
+df_main['Release Date'] = pd.to_datetime(df_main['Release Date'], errors='coerce')
+weekly = df_main[df_main['Release Date'] == today_dt]
+if not weekly.empty:
+    fr = weekly.iloc[0]
+    print(f"🎯 WEEKLY FULL {fr['Video ID']} {fr['Video Topic']}")
+    # Add full video generation here (same as before)

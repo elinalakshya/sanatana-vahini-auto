@@ -1,13 +1,20 @@
+
+
 """
-SANATANA VAHINI - FAST OPTIMIZED - Linked Colab + GitHub Auto
-Fixed: Fast video generation (ultrafast preset)
+SANATANA VAHINI - FAST - Fixed for MoviePy 2.2.1
 """
 import os, pandas as pd, asyncio, nest_asyncio, edge_tts
 from datetime import datetime
 
+# Fix for MoviePy v2 - import from both places
+try:
+    from moviepy.editor import AudioFileClip, ColorClip, VideoFileClip
+except ImportError:
+    # MoviePy 2.2.1 new location
+    from moviepy import AudioFileClip, ColorClip, VideoFileClip
+
 try:
     import google.generativeai as genai
-    from moviepy.editor import AudioFileClip, ColorClip
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload
@@ -15,10 +22,13 @@ except ImportError:
     import subprocess, sys
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "google-generativeai", "edge-tts", "moviepy", "pandas", "nest-asyncio", "google-api-python-client", "google-auth"])
     import google.generativeai as genai
-    from moviepy.editor import AudioFileClip, ColorClip
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload
+    try:
+        from moviepy.editor import AudioFileClip, ColorClip, VideoFileClip
+    except:
+        from moviepy import AudioFileClip, ColorClip, VideoFileClip
 
 def get_config():
     return (
@@ -32,7 +42,7 @@ GEMINI_KEY, YT_ID, YT_SECRET, YT_REFRESH = get_config()
 SHEET_ID = "15t2x8TAnvw4KgSVdpViCZmFQ0oEBZk2DDD7AOS0dwcE"
 nest_asyncio.apply()
 
-if GEMINI_KEY and "PASTE" not in GEMINI_KEY:
+if GEMINI_KEY and "PASTE" not in str(GEMINI_KEY):
     genai.configure(api_key=GEMINI_KEY)
     model = genai.GenerativeModel('gemini-1.5-flash')
 else:
@@ -58,7 +68,6 @@ def quality_check(video_path, audio_path, is_short=False):
         return False, f"Too small {size_mb:.2f}MB"
     print(f"✅ Size {size_mb:.2f}MB")
     try:
-        from moviepy.editor import VideoFileClip, AudioFileClip
         audio = AudioFileClip(audio_path)
         ad = audio.duration
         audio.close()
@@ -124,10 +133,9 @@ try:
             print("✅ Voice done")
             
             audio = AudioFileClip("gita_voice.mp3")
-            print(f"🎬 Creating video duration {audio.duration}s (FAST mode ultrafast)...")
+            print(f"🎬 Creating video duration {audio.duration}s (FAST)...")
             bg = ColorClip(size=(1080,1920), color=(25,15,5), duration=audio.duration)
-            final = bg.set_audio(audio)
-            # FAST PRESET - 10x faster
+            final = bg.with_audio(audio)
             final.write_videofile("GITA_SHORT.mp4", fps=24, codec='libx264', audio_codec='aac', preset='ultrafast', threads=2, logger=None)
             print("✅ Video created")
             audio.close()
@@ -148,17 +156,14 @@ except Exception as e:
     print(f"Error in Gita daily: {e}")
     import traceback; traceback.print_exc()
 
-# WEEKLY FULL
 try:
     MAIN_CSV = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
     df_main = pd.read_csv(MAIN_CSV)
     df_main['Release Date'] = pd.to_datetime(df_main['Release Date'], errors='coerce')
     weekly_today = df_main[df_main['Release Date'] == today_dt]
-    
     if not weekly_today.empty:
         fr = weekly_today.iloc[0]
         print(f"\n🎯 WEEKLY FULL TODAY: {fr['Video ID']} - {fr['Video Topic']}")
-        # Full video logic can be added here
     else:
         print("No full video today - only daily short")
 except Exception as e:
